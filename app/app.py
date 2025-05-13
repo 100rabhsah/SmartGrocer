@@ -8,6 +8,7 @@ from apriori_analysis import run_apriori
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
+import os
 
 # Set page config
 st.set_page_config(
@@ -76,105 +77,241 @@ with st.expander("📚 How Market Basket Analysis Works"):
     **Note:** In real-world scenarios, you need hundreds of transactions for meaningful patterns.
     """)
 
-# File uploader
-st.subheader("📂 Upload Your Data")
-st.markdown("""
-Upload your transaction data in CSV format. The file should have these columns:
-- Member_number: Customer ID
-- Date: Transaction date
-- itemDescription: Product name
-""")
+# Data Selection Section
+st.subheader("📂 Choose Your Data Source")
+data_source = st.radio(
+    "Select how you want to provide your data:",
+    ["Upload your own CSV file", "Use sample dataset", "Use Groceries dataset"],
+    horizontal=True
+)
 
-uploaded_file = st.file_uploader("Choose your CSV file", type=["csv"])
+data = None
 
-if uploaded_file is not None:
+if data_source == "Upload your own CSV file":
+    st.markdown("""
+    Upload your transaction data in CSV format. The file should have these columns:
+    - Member_number: Customer ID
+    - Date: Transaction date
+    - itemDescription: Product name
+    """)
+    
+    uploaded_file = st.file_uploader("Choose your CSV file", type=["csv"])
+    
+    if uploaded_file is not None:
+        try:
+            data = pd.read_csv(uploaded_file)
+        except Exception as e:
+            st.error(f"Error reading the file: {str(e)}")
+            st.info("Please make sure your CSV file has the correct format and columns.")
+elif data_source == "Use sample dataset":
+    # Use sample dataset
+    sample_file = os.path.join("data", "sample_transactions.csv")
+    if os.path.exists(sample_file):
+        try:
+            data = pd.read_csv(sample_file)
+            st.success("✅ Successfully loaded sample dataset!")
+            st.info("This is a small sample dataset with grocery store transactions. You can use this to explore the app's features.")
+        except Exception as e:
+            st.error(f"Error reading the sample file: {str(e)}")
+    else:
+        st.error("Sample dataset not found. Please upload your own CSV file or contact support.")
+else:  # Use Groceries dataset
+    groceries_file = os.path.join("data", "Groceries_dataset.csv")
+    if os.path.exists(groceries_file):
+        try:
+            data = pd.read_csv(groceries_file)
+            st.success("✅ Successfully loaded Groceries dataset!")
+            st.info("""
+            This is a comprehensive dataset of grocery store transactions. It includes:
+            - Real-world shopping patterns
+            - Multiple product categories
+            - Extended time period
+            - Large number of transactions
+            """)
+        except Exception as e:
+            st.error(f"Error reading the Groceries dataset: {str(e)}")
+    else:
+        st.error("Groceries dataset not found. Please upload your own CSV file or use the sample dataset.")
+
+if data is not None:
     try:
-        # Load and display data preview
-        data = pd.read_csv(uploaded_file)
-        
         # Data Preview Section
         st.subheader("📊 Data Preview")
         st.markdown("Here's a preview of your data. Make sure the format is correct.")
         st.dataframe(data.head(), use_container_width=True)
         
         # Basic Statistics Section
-        st.subheader("📈 Basic Statistics")
-        st.markdown("""
-        ### Understanding Your Data
+        st.subheader("📈 Store Overview")
         
-        Your dataset contains:
-        - **38,765 individual purchases** (rows in the dataset)
-        - **3,898 unique customers** (Member_number)
-        - **167 different products** (itemDescription)
+        # Calculate dynamic statistics
+        total_customers = len(data['Member_number'].unique())
+        total_products = len(data['itemDescription'].unique())
+        date_range = pd.to_datetime(data['Date'], format='%d-%m-%Y')
+        start_date = date_range.min().strftime('%B %Y')
+        end_date = date_range.max().strftime('%B %Y')
         
-        This means:
-        - On average, each customer made about 10 purchases (38,765 ÷ 3,898 ≈ 10)
-        - The data spans from January 1, 2014 to October 31, 2015
-        """)
+        # Calculate average purchases per customer
+        purchases_per_customer = data.groupby('Member_number').size()
+        avg_purchases = purchases_per_customer.mean()
         
-        # Calculate additional statistics
-        total_purchases = len(data)
-        avg_purchases_per_customer = total_purchases / len(data['Member_number'].unique())
-        total_days = (pd.to_datetime(data['Date'].max()) - pd.to_datetime(data['Date'].min())).days
-        avg_daily_transactions = total_purchases / total_days
+        # Simple Summary Box with dynamic statistics
+        st.markdown(f"""
+        <div style='background-color: rgba(240, 242, 246, 0.8); padding: 20px; border-radius: 10px; margin: 10px 0; border: 1px solid rgba(128, 128, 128, 0.2);'>
+            <h3 style='color: #1f77b4; margin-bottom: 15px;'>📊 Quick Summary</h3>
+            <p style='font-size: 18px; color: #2c3e50;'>Your store has:</p>
+            <ul style='font-size: 16px; color: #2c3e50; list-style-type: none; padding-left: 0;'>
+                <li style='margin-bottom: 8px;'>👥 <strong>{total_customers:,} loyal customers</strong></li>
+                <li style='margin-bottom: 8px;'>🛍️ <strong>{total_products:,} different products</strong> on your shelves</li>
+                <li style='margin-bottom: 8px;'>📅 Data from <strong>{start_date} to {end_date}</strong></li>
+            </ul>
+            <p style='font-size: 18px; margin-top: 15px; color: #2c3e50;'>💡 <strong>Key Insight:</strong> Each customer shops about {avg_purchases:.1f} times in your store</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Display detailed statistics
-        col1, col2 = st.columns(2)
+        # Visual Dashboard
+        st.markdown("### 📊 Store Performance Dashboard")
+        
+        # Create three columns for key metrics
+        col1, col2, col3 = st.columns(3)
+        
         with col1:
-            st.metric("Total Individual Purchases", f"{total_purchases:,}")
-            st.metric("Unique Customers", f"{len(data['Member_number'].unique()):,}")
-            st.metric("Different Products", f"{len(data['itemDescription'].unique()):,}")
+            st.markdown("""
+            <div style='text-align: center; padding: 20px; background-color: #e6f3ff; border-radius: 10px;'>
+                <h3 style='color: #1f77b4;'>👥 Customers</h3>
+                <h2 style='font-size: 36px; color: #1f77b4;'>{:,}</h2>
+                <p style='color: #666;'>Total Loyal Customers</p>
+            </div>
+            """.format(len(data['Member_number'].unique())), unsafe_allow_html=True)
+        
         with col2:
-            st.metric("Average Purchases per Customer", f"{avg_purchases_per_customer:.1f}")
-            st.metric("Average Daily Transactions", f"{avg_daily_transactions:.1f}")
-            st.metric("Date Range", f"{data['Date'].min()} to {data['Date'].max()}")
+            st.markdown("""
+            <div style='text-align: center; padding: 20px; background-color: #e6ffe6; border-radius: 10px;'>
+                <h3 style='color: #2e7d32;'>🛍️ Products</h3>
+                <h2 style='font-size: 36px; color: #2e7d32;'>{:,}</h2>
+                <p style='color: #666;'>Different Items in Store</p>
+            </div>
+            """.format(len(data['itemDescription'].unique())), unsafe_allow_html=True)
         
-        # Add explanation of the numbers
-        st.markdown("""
-        ### What These Numbers Mean
+        with col3:
+            st.markdown("""
+            <div style='text-align: center; padding: 20px; background-color: #fff3e6; border-radius: 10px;'>
+                <h3 style='color: #e65100;'>📅 Period</h3>
+                <h2 style='font-size: 24px; color: #e65100;'>{}</h2>
+                <p style='color: #666;'>Data Collection Period</p>
+            </div>
+            """.format(f"{data['Date'].min()} to {data['Date'].max()}"), unsafe_allow_html=True)
         
-        1. **Total Individual Purchases (38,765)**
-           - This is the total number of items purchased
-           - Each row represents one item bought by a customer
-           - For example, if a customer buys milk, bread, and eggs in one visit, that's 3 purchases
-        
-        2. **Unique Customers (3,898)**
-           - This is the number of different customers who made purchases
-           - Each customer is identified by their Member_number
-           - On average, each customer made about 10 purchases
-        
-        3. **Different Products (167)**
-           - This is the number of unique items available in the store
-           - Each product is counted only once, regardless of how many times it was purchased
-        
-        4. **Average Daily Transactions**
-           - This shows how many items are typically purchased per day
-           - Helps understand the store's daily activity level
-        """)
-        
-        # Add a visualization of purchase distribution
-        st.subheader("📊 Purchase Distribution")
-        st.markdown("How purchases are distributed across customers")
+        # Customer Shopping Patterns
+        st.markdown("### 👥 Customer Shopping Patterns")
         
         # Calculate purchases per customer
         purchases_per_customer = data.groupby('Member_number').size()
         
-        # Create histogram of purchases per customer
+        # Create a more visually appealing histogram
         fig = px.histogram(
             x=purchases_per_customer.values,
-            nbins=50,
+            nbins=30,
             labels={'x': 'Number of Purchases', 'y': 'Number of Customers'},
-            title='Distribution of Purchases per Customer'
+            title='How Often Do Customers Shop?',
+            color_discrete_sequence=['#1f77b4']
         )
+        
+        # Update layout for better readability
+        fig.update_layout(
+            plot_bgcolor='white',
+            xaxis_title="Number of Times a Customer Shops",
+            yaxis_title="Number of Customers",
+            showlegend=False,
+            title_x=0.5,
+            title_font_size=20
+        )
+        
+        # Add a vertical line for the average
+        fig.add_vline(
+            x=purchases_per_customer.mean(),
+            line_dash="dash",
+            line_color="red",
+            annotation_text="Average",
+            annotation_position="top right"
+        )
+        
         st.plotly_chart(fig, use_container_width=True)
         
-        # Add summary of purchase distribution
-        st.markdown(f"""
-        **Purchase Distribution Summary:**
-        - Most customers made between {purchases_per_customer.quantile(0.25):.0f} and {purchases_per_customer.quantile(0.75):.0f} purchases
-        - The median number of purchases per customer is {purchases_per_customer.median():.0f}
-        - The maximum number of purchases by a single customer is {purchases_per_customer.max():.0f}
-        """)
+        # Simple interpretation
+        st.markdown("""
+        <div style='background-color: rgba(240, 242, 246, 0.8); padding: 20px; border-radius: 10px; margin: 10px 0; border: 1px solid rgba(128, 128, 128, 0.2);'>
+            <h4 style='color: #1f77b4; margin-bottom: 15px; font-weight: bold;'>💡 What This Means for Your Store:</h4>
+            <ul style='font-size: 16px; color: #2c3e50; list-style-type: none; padding-left: 0;'>
+                <li style='margin-bottom: 8px;'>• Most customers shop between {} and {} times</li>
+                <li style='margin-bottom: 8px;'>• The average customer makes about {:.1f} purchases</li>
+                <li style='margin-bottom: 8px;'>• Your most loyal customer has made {} purchases</li>
+            </ul>
+        </div>
+        """.format(
+            int(purchases_per_customer.quantile(0.25)),
+            int(purchases_per_customer.quantile(0.75)),
+            purchases_per_customer.mean(),
+            int(purchases_per_customer.max())
+        ), unsafe_allow_html=True)
+        
+        # Daily Transaction Pattern
+        st.markdown("### 📅 Daily Shopping Patterns")
+        
+        # Calculate daily transactions
+        daily_transactions = data.groupby(data['Date']).size().reset_index()
+        daily_transactions.columns = ['Date', 'Transactions']
+        
+        # Create a line chart for daily transactions
+        fig = px.line(
+            daily_transactions,
+            x='Date',
+            y='Transactions',
+            title='Daily Shopping Activity',
+            labels={'Transactions': 'Number of Items Sold', 'Date': 'Date'},
+            color_discrete_sequence=['#1f77b4']
+        )
+        
+        # Update layout
+        fig.update_layout(
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            xaxis_title="Date",
+            yaxis_title="Number of Items Sold",
+            showlegend=False,
+            title_x=0.5,
+            title_font_size=20,
+            font=dict(
+                family="Arial",
+                size=12,
+                color="#2c3e50"
+            )
+        )
+        
+        # Update axes for better visibility
+        fig.update_xaxes(
+            gridcolor='rgba(128, 128, 128, 0.2)',
+            zerolinecolor='rgba(128, 128, 128, 0.2)',
+            tickfont=dict(color="#2c3e50")
+        )
+        fig.update_yaxes(
+            gridcolor='rgba(128, 128, 128, 0.2)',
+            zerolinecolor='rgba(128, 128, 128, 0.2)',
+            tickfont=dict(color="#2c3e50")
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Simple interpretation of daily patterns with improved visibility
+        st.markdown("""
+        <div style='background-color: rgba(240, 242, 246, 0.8); padding: 20px; border-radius: 10px; margin: 10px 0; border: 1px solid rgba(128, 128, 128, 0.2);'>
+            <h4 style='color: #1f77b4; margin-bottom: 15px; font-weight: bold;'>💡 Understanding Your Daily Sales:</h4>
+            <ul style='font-size: 16px; color: #2c3e50; list-style-type: none; padding-left: 0;'>
+                <li style='margin-bottom: 8px;'>• On average, you sell about {:.1f} items per day</li>
+                <li style='margin-bottom: 8px;'>• This helps you plan your inventory and staffing</li>
+                <li style='margin-bottom: 8px;'>• Look for patterns in busy and quiet days</li>
+            </ul>
+        </div>
+        """.format(daily_transactions['Transactions'].mean()), unsafe_allow_html=True)
         
         # Analysis Parameters Section
         st.subheader("⚙️ Analysis Parameters")
@@ -281,13 +418,142 @@ if uploaded_file is not None:
                     )
                     
                     st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Analysis Results Section
+                    st.subheader("🔍 What Products Do Customers Buy Together?")
+                    
+                    # Simple explanation box
+                    st.markdown("""
+                    <div style='background-color: rgba(240, 242, 246, 0.8); padding: 20px; border-radius: 10px; margin: 10px 0;'>
+                        <h3 style='color: #1f77b4; margin-bottom: 15px;'>💡 Understanding Product Relationships</h3>
+                        <p style='font-size: 16px; color: inherit;'>We found some interesting patterns in how customers shop:</p>
+                        <ul style='font-size: 16px; color: inherit;'>
+                            <li>When customers buy certain products, they often buy other specific products</li>
+                            <li>These patterns can help you with product placement and promotions</li>
+                            <li>The stronger the relationship, the more likely customers are to buy these items together</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Display top 3 rules in a user-friendly format
+                    st.markdown("### 🏆 Top 3 Strongest Product Relationships")
+                    
+                    for idx, rule in rules.head(3).iterrows():
+                        antecedents = ', '.join(list(rule['antecedents']))
+                        consequents = ', '.join(list(rule['consequents']))
+                        st.markdown(f"""
+                        <div style='background-color: rgba(240, 242, 246, 0.8); padding: 20px; border-radius: 10px; margin: 10px 0;'>
+                            <h4 style='color: #1f77b4; margin-bottom: 10px;'>Relationship {idx + 1}</h4>
+                            <p style='font-size: 16px; color: inherit;'>
+                                When customers buy <strong>{antecedents}</strong>,<br>
+                                they often also buy <strong>{consequents}</strong>
+                            </p>
+                            <div style='display: flex; justify-content: space-between; margin-top: 10px;'>
+                                <div style='text-align: center; flex: 1;'>
+                                    <p style='font-size: 14px; color: inherit;'>How Common</p>
+                                    <p style='font-size: 18px; color: #2e7d32;'>{rule['support']:.1%}</p>
+                                </div>
+                                <div style='text-align: center; flex: 1;'>
+                                    <p style='font-size: 14px; color: inherit;'>How Reliable</p>
+                                    <p style='font-size: 18px; color: #1f77b4;'>{rule['confidence']:.1%}</p>
+                                </div>
+                                <div style='text-align: center; flex: 1;'>
+                                    <p style='font-size: 14px; color: inherit;'>Strength</p>
+                                    <p style='font-size: 18px; color: #e65100;'>{rule['lift']:.1f}x</p>
+                                </div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # Visualize top rules with improved styling
+                    st.markdown("### 📊 Visualizing Product Relationships")
+                    st.markdown("""
+                    <div style='background-color: rgba(240, 242, 246, 0.8); padding: 20px; border-radius: 10px; margin: 10px 0;'>
+                        <p style='font-size: 16px; color: inherit;'>This chart shows the strongest product relationships:</p>
+                        <ul style='font-size: 16px; color: inherit;'>
+                            <li>Bigger bubbles = stronger relationships</li>
+                            <li>Higher up = more reliable patterns</li>
+                            <li>Further right = more common combinations</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Create scatter plot with improved styling
+                    fig = px.scatter(
+                        top_rules,
+                        x='support',
+                        y='confidence',
+                        size='lift',
+                        hover_data=['hover_text'],
+                        title='Product Relationship Strength'
+                    )
+                    
+                    # Update layout for better visibility in both modes
+                    fig.update_layout(
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        xaxis_title="How Common (Support)",
+                        yaxis_title="How Reliable (Confidence)",
+                        showlegend=False,
+                        title_x=0.5,
+                        title_font_size=20,
+                        font=dict(
+                            family="Arial",
+                            size=12,
+                            color="#2c3e50"  # Dark gray that works in both modes
+                        )
+                    )
+                    
+                    # Update axes for better visibility
+                    fig.update_xaxes(
+                        gridcolor='rgba(128, 128, 128, 0.2)',
+                        zerolinecolor='rgba(128, 128, 128, 0.2)',
+                        tickfont=dict(color="#2c3e50")
+                    )
+                    fig.update_yaxes(
+                        gridcolor='rgba(128, 128, 128, 0.2)',
+                        zerolinecolor='rgba(128, 128, 128, 0.2)',
+                        tickfont=dict(color="#2c3e50")
+                    )
+                    
+                    # Update traces for better visibility
+                    fig.update_traces(
+                        marker=dict(
+                            color='#1f77b4',  # Blue color for points
+                            line=dict(
+                                color='#ffffff',  # White border
+                                width=1
+                            )
+                        )
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Actionable insights
+                    st.markdown("### 💡 How to Use This Information")
+                    st.markdown("""
+                    <div style='background-color: rgba(240, 242, 246, 0.8); padding: 20px; border-radius: 10px; margin: 10px 0;'>
+                        <h4 style='color: #1f77b4; margin-bottom: 15px;'>Practical Tips for Your Store:</h4>
+                        <ul style='font-size: 16px; color: inherit;'>
+                            <li>Place related products near each other to encourage more sales</li>
+                            <li>Create special offers for products that are often bought together</li>
+                            <li>Use these insights to plan your inventory and promotions</li>
+                            <li>Consider creating bundle deals for strongly related products</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
                     st.warning("""
-                    No association rules found with the current parameters. Try:
-                    1. Lowering the minimum support
-                    2. Lowering the minimum confidence
-                    3. Checking if your data has enough transactions
-                    """)
+                    <div style='background-color: rgba(240, 242, 246, 0.8); padding: 20px; border-radius: 10px; margin: 10px 0;'>
+                        <h4 style='color: #e65100; margin-bottom: 15px;'>No Strong Patterns Found</h4>
+                        <p style='font-size: 16px; color: inherit;'>Try these adjustments:</p>
+                        <ul style='font-size: 16px; color: inherit;'>
+                            <li>Lower the minimum support (how common a pattern should be)</li>
+                            <li>Lower the minimum confidence (how reliable a pattern should be)</li>
+                            <li>Make sure you have enough transaction data</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
                 
                 # Export Section
                 st.subheader("💾 Export Results")
